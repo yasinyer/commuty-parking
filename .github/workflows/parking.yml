@@ -1,0 +1,63 @@
+name: Commuty Parking Reservering
+
+on:
+  schedule:
+    # Elke dag (incl. weekend) meerdere runs: het script is idempotent (bestaande
+    # reserveringen worden overgeslagen, dubbels geweigerd) en boekt elke shiftdag
+    # zodra hij in Commuty's boekingsvenster valt — ook als dat venster op een
+    # weekenddag opengaat.
+    - cron: '30 5 * * *'   # ~07:30 Belgische tijd (zomer)
+    - cron: '30 8 * * *'   # ~10:30
+    - cron: '30 11 * * *'  # ~13:30
+    - cron: '30 14 * * *'  # ~16:30
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Modus: reserve / discover / book (test)'
+        default: 'reserve'
+      date:
+        description: 'Alleen voor book-test: datum YYYY-MM-DD (leeg = eerstvolgende werkdag)'
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  reserve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+
+      - name: Reserveren (of verkennen)
+        run: python reserve_parking.py --${{ github.event.inputs.mode || 'reserve' }}
+        env:
+          BOOK_DATE: ${{ github.event.inputs.date }}
+          COMMUTY_REFRESH_TOKEN: ${{ secrets.COMMUTY_REFRESH_TOKEN }}
+          COMMUTY_ORG: ${{ secrets.COMMUTY_ORG }}
+          COMMUTY_USER_ID: ${{ secrets.COMMUTY_USER_ID }}
+          COMMUTY_PARKING_SITES: ${{ secrets.COMMUTY_PARKING_SITES }}
+          COMMUTY_ICAL_URL: ${{ secrets.COMMUTY_ICAL_URL }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_ICAL_CALENDAR_ID: ${{ secrets.GOOGLE_ICAL_CALENDAR_ID }}
+
+      # Ultiem vangnet: als wélke stap dan ook faalt, altijd een Telegram-melding —
+      # los van het Python-script (dat bij een vroege fout nooit start)
+      - name: Telegram-melding bij jobfout
+        if: failure()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="❌ Commuty parking-workflow gefaald. Reserveer eventueel manueel. Log: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" > /dev/null
+          echo "Foutmelding verstuurd."
