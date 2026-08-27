@@ -55,7 +55,6 @@ GOOGLE_CLIENT_ID     = cfg("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = cfg("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = cfg("GOOGLE_REFRESH_TOKEN")
 GOOGLE_CALENDAR_ID   = cfg("GOOGLE_CALENDAR_ID")
-GOOGLE_ICAL_CALENDAR = cfg("GOOGLE_ICAL_CALENDAR_ID")
 
 TELEGRAM_TOKEN   = cfg("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = cfg("TELEGRAM_CHAT_ID")
@@ -497,27 +496,6 @@ def _day_bounds(date):
     return start.isoformat(), (start + timedelta(days=1)).isoformat()
 
 
-def get_shift_start_time(target_date, google_token):
-    """Begintijd van de eerste shift op target_date uit de geïmporteerde iCal-agenda."""
-    if not GOOGLE_ICAL_CALENDAR:
-        return None
-    t0, t1 = _day_bounds(target_date)
-    r = requests.get(
-        f"https://www.googleapis.com/calendar/v3/calendars/{quote(GOOGLE_ICAL_CALENDAR, safe='')}/events",
-        headers={"Authorization": f"Bearer {google_token}"},
-        params={"timeMin": t0, "timeMax": t1, "singleEvents": "true", "orderBy": "startTime"},
-        timeout=15,
-    )
-    events = api_json(r, "Shift opzoeken in agenda").get("items", [])
-    if not events:
-        return None
-    start = events[0]["start"].get("dateTime") or events[0]["start"].get("date")
-    dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
-    if dt.tzinfo:
-        dt = dt.astimezone(BRUSSELS)
-    return dt
-
-
 def _list_parking_events(date, google_token):
     """Alle 🅿️-events op een dag in de hoofdagenda."""
     t0, t1 = _day_bounds(date)
@@ -539,6 +517,10 @@ def sync_google_calendar(token, org, google_token, extra=None):
     if extra:
         zones.update(extra)
 
+    # Shift-begintijden uit het Commuty-rooster (dezelfde iCal die we al inlezen);
+    # zo is er geen aparte Google-agenda (GOOGLE_ICAL_CALENDAR_ID) meer nodig.
+    shift_starts = {d: se[0] for d, se in (get_shift_times(days_ahead=8) or {}).items()}
+
     today    = belgian_now().date()
     cal_base = f"https://www.googleapis.com/calendar/v3/calendars/{quote(GOOGLE_CALENDAR_ID, safe='')}/events"
     headers  = {"Authorization": f"Bearer {google_token}", "Content-Type": "application/json"}
@@ -556,7 +538,7 @@ def sync_google_calendar(token, org, google_token, extra=None):
             continue
 
         want_summary = f"🅿️ {desired}"
-        shift_start  = get_shift_start_time(date, google_token)
+        shift_start  = shift_starts.get(date)
         want_start   = shift_start - timedelta(minutes=30) if shift_start else None
 
         if not events:

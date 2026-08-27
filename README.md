@@ -48,7 +48,7 @@ zonder ooit nog langs Microsoft te moeten.
    | `COMMUTY_PARKING_SITES` | – | Voorkeursvolgorde van parking-sites, bv. `VRT Put,VRT Reyers,VRT Oost,VRT West` |
    | `COMMUTY_USER_ID` | – | Eigen user-id (wordt automatisch uit `/me` gehaald; enkel nodig als override) |
    | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | – | Voor pushmeldingen |
-   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`, `GOOGLE_ICAL_CALENDAR_ID` | – | Voor de Google Calendar-sync |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID` | – | Voor de Google Calendar-sync |
 
 3. **Verkennen** — draai één keer de discover-modus zodat het script jouw
    organisatie, parking-sites, credits en de exacte reservatie-structuur toont:

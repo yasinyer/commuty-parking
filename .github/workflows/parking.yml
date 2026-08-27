@@ -47,7 +47,6 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
-          GOOGLE_ICAL_CALENDAR_ID: ${{ secrets.GOOGLE_ICAL_CALENDAR_ID }}
 
       # Ultiem vangnet: als wélke stap dan ook faalt, altijd een Telegram-melding —
       # los van het Python-script (dat bij een vroege fout nooit start)
