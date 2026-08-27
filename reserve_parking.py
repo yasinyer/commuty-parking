@@ -375,6 +375,25 @@ def _activities_body(user_id, site_id, start_ts, end_ts):
     }
 
 
+def _confirm_reserved(token, org, date):
+    """Grond-waarheid: staat er op 'date' écht een niet-geannuleerde
+    parkingreservering in de planner? Commuty geeft namelijk soms een 2xx terug
+    op een POST zonder dat er een reservering ontstaat (bv. een site waar je geen
+    recht op hebt), dus een 2xx-status alleen is geen bewijs."""
+    try:
+        items = _activities(token, org, date, date + timedelta(days=1))
+    except Exception:
+        return False
+    for it in (items if isinstance(items, list) else []):
+        if (it.get("startTime") or "")[:10] != date.isoformat():
+            continue
+        if (it.get("title") or "").strip().lower() == "geannuleerd":
+            continue
+        if it.get("parkingSpotRequest"):
+            return True
+    return False
+
+
 def reserve_for_date(token, org, date, sites, user_id, shift=None):
     """Reserveert een parking voor één dag via POST activities. Probeert de sites
     in voorkeursvolgorde. Geeft (status, site_naam), status ∈
@@ -385,14 +404,26 @@ def reserve_for_date(token, org, date, sites, user_id, shift=None):
     # de dag ligt nog te ver vooruit. We proberen daarom ALLE sites; enkel als
     # elke site out_of_bound geeft, beschouwen we de dag als (nog) niet boekbaar.
     all_out_of_bound = True
+    # Sommige sites geven een 2xx terug zonder dat er écht geboekt wordt
+    # (spookboeking). We verifiëren zulke 2xx'en in de planner en, als er niets
+    # blijkt te staan, gaan we door naar de volgende site i.p.v. vals 'ok' te
+    # melden. Blijft ALLES een spook/out_of_bound, dan is de dag (nog) niet
+    # boekbaar → 'not_open' (stille retry), geen valse succes- of foutmelding.
+    phantom = False
     for site in ordered_sites(sites):
         body = _activities_body(user_id, site["id"], start_ts, end_ts)
         r = with_retry(lambda: requests.post(
             f"{API_BASE}{org}/activities", headers=headers, json=body, timeout=20,
         ), f"reserveren {site['name']}")
         if r.status_code in (200, 201):
-            print(f"  {date}: ✅ Gereserveerd — {site['name']}")
-            return "ok", site["name"]
+            if _confirm_reserved(token, org, date):
+                print(f"  {date}: ✅ Gereserveerd — {site['name']}")
+                return "ok", site["name"]
+            # 2xx maar geen reservering in de planner → spookboeking.
+            phantom = True
+            print(f"  {date}: {site['name']} gaf 2xx maar geen echte reservering "
+                  f"(spookboeking) — volgende site proberen...")
+            continue
         txt = r.text[:200]
         low = txt.lower()
         if "already_exists" in low or "already" in low or "reeds" in low or r.status_code == 409:
@@ -406,9 +437,9 @@ def reserve_for_date(token, org, date, sites, user_id, shift=None):
             continue
         all_out_of_bound = False
         print(f"  {date}: {site['name']} mislukt ({r.status_code}: {txt}), volgende site proberen...")
-    if all_out_of_bound:
-        # Alle sites vol of de dag ligt nog buiten het boekingsvenster; latere
-        # runs proberen het opnieuw.
+    if all_out_of_bound or phantom:
+        # Alle sites vol, spook, of de dag ligt nog buiten het boekingsvenster;
+        # latere runs proberen het opnieuw.
         print(f"  {date}: (nog) geen enkele site beschikbaar — later opnieuw")
         return "not_open", None
     print(f"  {date}: ❌ Alle sites geweigerd")
