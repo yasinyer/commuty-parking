@@ -920,9 +920,22 @@ def cmd_reserve():
     except Exception as e:
         print(f"  Agenda-sync mislukt: {e}")
         if _in_primary_window() or os.environ.get("GITHUB_EVENT_NAME") != "schedule":
-            notify("⚠️ Google Calendar",
-                   f"Reserveringen zelf zijn OK, maar de agenda-sync is mislukt: {str(e)[:200]}",
-                   error=True)
+            msg = str(e)
+            # Een verlopen/ingetrokken Google-token is de meest voorkomende oorzaak
+            # (OAuth-app in 'Testing' laat refresh tokens na 7 dagen verlopen). Dat
+            # raakt ENKEL de agenda-sync — het reserveren loopt gewoon door. Maak de
+            # melding daarom ondubbelzinnig zodat ze niet als een reservatiefout leest.
+            if "invalid_grant" in msg or "expired or revoked" in msg:
+                notify("📅 Alleen Google-agenda ligt stil — reserveren werkt gewoon door",
+                       "Je parking wordt nog steeds automatisch gereserveerd. Enkel het "
+                       "bijwerken van de Google-agenda is gestopt omdat de Google-token verlopen "
+                       "is. Genereer een nieuwe GOOGLE_REFRESH_TOKEN en publiceer de OAuth-app "
+                       "naar 'In production' zodat de token niet meer om de 7 dagen verloopt.",
+                       error=True)
+            else:
+                notify("📅 Google-agenda niet bijgewerkt — reserveren werkt gewoon door",
+                       f"Het reserveren zelf is OK; enkel de agenda-sync faalde: {msg[:200]}",
+                       error=True)
 
 
 if __name__ == "__main__":
