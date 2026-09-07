@@ -507,7 +507,58 @@ def get_shift_times(days_ahead=7):
 
 
 # ── Google Calendar ─────────────────────────────────────────────
+GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar"
+
+
+def _service_account_token(sa_json):
+    """Access token via een Google service-account (JWT bearer grant). Verloopt
+    NOOIT zoals een OAuth refresh token in 'Testing' — de sleutel mint elke run
+    zelf een vers, kortstondig token. Vereist dat je de agenda deelt met het
+    service-account-adres (client_email) met rechten om events te wijzigen."""
+    info = json.loads(sa_json)
+    now = int(time.time())
+    header = {"alg": "RS256", "typ": "JWT"}
+    claim = {
+        "iss":   info["client_email"],
+        "scope": GOOGLE_SCOPE,
+        "aud":   "https://oauth2.googleapis.com/token",
+        "iat":   now,
+        "exp":   now + 3600,
+    }
+
+    def b64(obj):
+        import base64
+        return base64.urlsafe_b64encode(json.dumps(obj).encode()).rstrip(b"=")
+
+    signing_input = b64(header) + b"." + b64(claim)
+
+    # RS256-handtekening met 'cryptography' (staat in de pip-install van de
+    # workflow, naast requests).
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    import base64
+    key = serialization.load_pem_private_key(info["private_key"].encode(), password=None)
+    signature = key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
+    assertion = signing_input + b"." + base64.urlsafe_b64encode(signature).rstrip(b"=")
+
+    r = requests.post("https://oauth2.googleapis.com/token", data={
+        "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        "assertion":  assertion.decode(),
+    }, timeout=15)
+    data = api_json(r, "Google service-account token")
+    token = data.get("access_token")
+    if not token:
+        raise RuntimeError(f"Google gaf geen access_token: {str(data)[:200]}")
+    return token
+
+
 def get_google_token():
+    """Google access token. Gebruikt bij voorkeur een service-account
+    (GOOGLE_SERVICE_ACCOUNT_JSON — verloopt nooit); valt anders terug op de
+    klassieke OAuth refresh-token-methode."""
+    sa_json = cfg("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if sa_json:
+        return _service_account_token(sa_json)
     r = requests.post("https://oauth2.googleapis.com/token", data={
         "client_id":     GOOGLE_CLIENT_ID,
         "client_secret": GOOGLE_CLIENT_SECRET,
@@ -905,7 +956,7 @@ def cmd_reserve():
             print("Geen nieuwe reserveringen nodig.")
 
     # Google Calendar synchroniseren — als laatste en volledig afgeschermd.
-    if not GOOGLE_REFRESH_TOKEN:
+    if not GOOGLE_REFRESH_TOKEN and not cfg("GOOGLE_SERVICE_ACCOUNT_JSON"):
         return
     print("\nGoogle Calendar controleren...")
     try:

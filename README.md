@@ -48,7 +48,9 @@ zonder ooit nog langs Microsoft te moeten.
    | `COMMUTY_PARKING_SITES` | – | Voorkeursvolgorde van parking-sites, bv. `VRT Put,VRT Reyers,VRT Oost,VRT West` |
    | `COMMUTY_USER_ID` | – | Eigen user-id (wordt automatisch uit `/me` gehaald; enkel nodig als override) |
    | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | – | Voor pushmeldingen |
-   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID` | – | Voor de Google Calendar-sync |
+   | `GOOGLE_CALENDAR_ID` | – | Agenda voor de 🅿️-events, bv. je Gmail-adres |
+   | `GOOGLE_SERVICE_ACCOUNT_JSON` | – | **Aanbevolen** voor de agenda-sync: de volledige JSON-sleutel van een Google service-account. Verloopt nooit. Deel je agenda (`GOOGLE_CALENDAR_ID`) één keer met het `client_email`-adres uit de JSON, met recht "Wijzigingen aan afspraken aanbrengen". |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | – | Alternatief voor de agenda-sync via OAuth. Let op: een OAuth-app in "Testing" laat het refresh token na 7 dagen verlopen — gebruik liever een service-account. |
 
 3. **Verkennen** — draai één keer de discover-modus zodat het script jouw
    organisatie, parking-sites, credits en de exacte reservatie-structuur toont:
