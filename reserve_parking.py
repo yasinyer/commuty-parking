@@ -51,6 +51,15 @@ SITE_PREFERENCE = [s.strip() for s in
                    cfg("COMMUTY_PARKING_SITES", "VRT Put,VRT Reyers,VRT Oost,VRT West").split(",")
                    if s.strip()]
 
+# In het weekend wil de gebruiker bij voorkeur op VRT Put of VRT West staan.
+# Put en West krijgen dan voorrang; de overige sites blijven als terugval staan
+# zodat er in het weekend nooit zonder plaats gereserveerd wordt. Overschrijfbaar
+# via COMMUTY_WEEKEND_PARKING_SITES.
+WEEKEND_SITE_PREFERENCE = [s.strip() for s in
+                           cfg("COMMUTY_WEEKEND_PARKING_SITES",
+                               "VRT Put,VRT West,VRT Reyers,VRT Oost").split(",")
+                           if s.strip()]
+
 GOOGLE_CLIENT_ID     = cfg("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = cfg("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = cfg("GOOGLE_REFRESH_TOKEN")
@@ -231,15 +240,17 @@ def get_parking_sites(token, org):
     return sites
 
 
-def ordered_sites(sites):
-    """Sites in voorkeursvolgorde (SITE_PREFERENCE op naam of id), rest erachter."""
-    if not SITE_PREFERENCE:
+def ordered_sites(sites, weekend=False):
+    """Sites in voorkeursvolgorde, rest erachter. In het weekend geldt
+    WEEKEND_SITE_PREFERENCE (Put/West eerst); anders SITE_PREFERENCE."""
+    pref = WEEKEND_SITE_PREFERENCE if weekend else SITE_PREFERENCE
+    if not pref:
         return sites
     def rank(s):
-        for i, pref in enumerate(SITE_PREFERENCE):
-            if pref.lower() in (str(s["id"]).lower(), str(s["name"]).lower()):
+        for i, p in enumerate(pref):
+            if p.lower() in (str(s["id"]).lower(), str(s["name"]).lower()):
                 return i
-        return len(SITE_PREFERENCE) + 1
+        return len(pref) + 1
     return sorted(sites, key=rank)
 
 
@@ -410,7 +421,9 @@ def reserve_for_date(token, org, date, sites, user_id, shift=None):
     # melden. Blijft ALLES een spook/out_of_bound, dan is de dag (nog) niet
     # boekbaar → 'not_open' (stille retry), geen valse succes- of foutmelding.
     phantom = False
-    for site in ordered_sites(sites):
+    # Weekend (za/zo): VRT Put/West eerst (gebruikersvoorkeur).
+    weekend = date.weekday() >= 5
+    for site in ordered_sites(sites, weekend=weekend):
         body = _activities_body(user_id, site["id"], start_ts, end_ts)
         r = with_retry(lambda: requests.post(
             f"{API_BASE}{org}/activities", headers=headers, json=body, timeout=20,
