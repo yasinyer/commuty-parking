@@ -20,7 +20,7 @@ on:
         default: ''
 
 permissions:
-  contents: read
+  contents: write   # nodig voor de keepalive-commit onderaan
 
 jobs:
   reserve:
@@ -48,6 +48,26 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+
+      # Houdt de geplande cron actief: GitHub schakelt scheduled workflows uit na
+      # 60 dagen zonder repo-activiteit (dat gebeurde: de runs stopten vanzelf).
+      # We duwen daarom ~elke 45 dagen een lege commit via de ingebouwde
+      # GITHUB_TOKEN. Zo'n commit triggert zelf geen workflow (geen lus), maar
+      # telt wél als activiteit en reset de 60-dagen-teller.
+      - name: Keepalive cron
+        if: always() && github.event_name == 'schedule'
+        run: |
+          days=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "Laatste commit is $days dag(en) oud."
+          if [ "$days" -ge 45 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "keepalive: geplande cron actief houden"
+            git push
+            echo "Keepalive-commit geduwd."
+          else
+            echo "Nog geen keepalive nodig."
+          fi
 
       # Ultiem vangnet: als wélke stap dan ook faalt, altijd een Telegram-melding —
       # los van het Python-script (dat bij een vroege fout nooit start)
